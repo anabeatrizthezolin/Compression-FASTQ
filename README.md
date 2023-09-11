@@ -1,1 +1,1 @@
-# IC-2022
+# Compression-FASTQ
