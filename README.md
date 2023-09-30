@@ -60,7 +60,7 @@ python3 main.py dataset/frag.fastq --bsc -3 -r 2
 **Output:**
 
 ```c
-Sending logging messages to file: dataset/frag_colex.bsc.log
+Sending logging messages to file: external/frag_colex.bsc.log
 
 
 ###### COMPRESSION ######
@@ -79,7 +79,7 @@ python3 Script_test.py dataset/frag.fastq --bsc -c 3 -r 4
 **Output:**
 
 ```c
-Sending logging messages to file: dataset/frag_colex.bsc.log
+Sending logging messages to file: external/frag_colex.bsc.log
 
 
 ###### COMPRESSION ######
@@ -88,7 +88,7 @@ Size .fastq: 293596682.000000 bytes
 
 Compression 3-components with partitions (sum parts): 0.33818
 ```
-<img align="center" src="resources/c3bsc.png?raw=true" />
+<img align="center" src="external/c3bsc.png?raw=true" />
 </a>
-<img align="center" src="resources/t3bsc.png?raw=true" />
+<img align="center" src="external/t3bsc.png?raw=true" />
 </a>
