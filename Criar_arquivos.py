@@ -18,7 +18,7 @@ f = open(sys.argv[1], 'r')
 
 sum = 0
 s = None
-while(s != "" and cont <= 125):
+while(s != "" and cont < os.path.getsize(sys.argv[1])):
     
     for i in range(4):
         s = f.readline()

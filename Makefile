@@ -11,15 +11,19 @@ ALG = 10
 CFLAGS += $(DEFINES)
 
 all:
+	make -C external/gsufsort/ DNA=1
 	make main  
 
 clean:
-	\rm dataset/*.log dataset/*.zip dataset/*.header dataset/*.dna dataset/*.qs dataset/*.part dataset/*.txt dataset/*.bsc dataset/*order.fastq dataset/*MB.fastq
+	\rm dataset/*.log dataset/*.zip dataset/*.header dataset/*.dna \
+	dataset/*.qs dataset/*.part dataset/*.bsc dataset/*.4.lcp \
+	dataset/*.4.sa dataset/*.bwt dataset/*.optBWT dataset/*data.txt \
+	dataset/*.4.lcp dataset/*.4.sa dataset/*.4.isa \
+	dataset/*.bwt  dataset/*_lex.fastq dataset/*_colex.fastq \
+	dataset/*_random.fastq dataset/*MB.fastq
 
 main: 
-	$(CC) -o sap SAP.cpp $(CFLAGS) $(LFLAGS) 
-	$(CC) -o lex lex.cpp $(CFLAGS) $(LFLAGS) 
+	$(CC) -o optBWT optBWT.cpp $(CFLAGS) $(LFLAGS)
 	
 run:
-	./sap $(INPUT) -A $(ALG)
-	./lex $(INPUT) -A $(ALG)
+	./optBWT $(INPUT) -A $(ALG)

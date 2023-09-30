@@ -1,4 +1,6 @@
-import sys, time, argparse, subprocess, os.path, pathlib, shutil
+import sys, time, argparse
+import subprocess, os.path, pathlib
+import math, shutil
 from xml.etree.ElementInclude import default_loader
 
 Description = """FASTQ file compression tool
@@ -12,22 +14,23 @@ Command line options:
 
 cmd7z = "7z a -mm=PPMd"
 cmdbsc = "external/libbsc/bsc e"
+cmdreorder = "reorder.py"
 sap = "./sap"
 lex = "./lex"
 
 def main():
     parser = argparse.ArgumentParser(description=Description, formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('input',         help='input file name', type=str, nargs='+')
-    parser.add_argument('-o','--output', help='output base name (def. input base name)', default="", type=str) 
-    parser.add_argument('--7z',          help='compression 7 zip: compression of the file with 7 zip', action='store_true', default = False)
-    parser.add_argument('--bsc',         help='compression bsc: compression of the file with bsc', action='store_true', default = False)
-    parser.add_argument('-1', '--c1',    help='compression 1: compression of the input file', action='store_true', default = False)
-    parser.add_argument('-2', '--c2',    help='compression 2: compression of the file in blocks', action='store_true', default = False)
-    parser.add_argument('-3', '--c3',    help='compression 3: compression of the file in partitions', action='store_true', default = False)
-    parser.add_argument('--sap',         help='reorder sap: reorder file reads with SAP', action='store_true', default = False)
-    parser.add_argument('--lex',         help='reorder in lexicographical order: reorder file reads in lexicographical order', action='store_true', default = False)
-    parser.add_argument('-p','--part',   help='size of the part for file division', default=False, type=int)
-    parser.add_argument('-v',            help='verbose: extra info in the log file',action='store_true')
+    parser.add_argument('input',           help='input file name', type=str, nargs='+')
+    parser.add_argument('-o', '--output',  help='output base name (def. input base name)', default="", type=str) 
+    parser.add_argument('--7z',            help='compression 7 zip: compression of the file with 7 zip', action='store_true', default = False)
+    parser.add_argument('--bsc',           help='compression bsc: compression of the file with bsc', action='store_true', default = False)
+    parser.add_argument('-1', '--c1',      help='compression 1: compression of the input file', action='store_true', default = False)
+    parser.add_argument('-2', '--c2',      help='compression 2: compression of the file in partitions', action='store_true', default = False)
+    parser.add_argument('-3', '--c3',      help='compression 3: compression of the file in 3-components and partitions', action='store_true', default = False)
+    parser.add_argument('-r', '--reorder', help='reorder option: 1 (lexicographical order), 2 (colexicographical order) or 3(random order)', default=False, type=int)
+    parser.add_argument('-p', '--part',    help='size of the part for file division in MB', default=False, type=int)
+    parser.add_argument('-t', '--test',    help='compression test: original file', default="", type=str)
+    parser.add_argument('-v',              help='verbose: extra info in the log file',action='store_true')
     args = parser.parse_args()
     
     define_basename(args)
@@ -36,38 +39,60 @@ def main():
     path_inp = os.path.split(sys.argv[1])[0]
     inp = os.path.splitext(sys.argv[1])[0]
 
-    if(args.output): #all output files named args.out
-        logfile_name = os.path.join(path_inp, args.output) + ".zip.log"
-        file_out = os.path.join(path_inp, args.output) + ".zip"
-        file_header = os.path.join(path_inp, args.output) + ".header"
-        file_dna = os.path.join(path_inp, args.output) + ".dna"
-        file_qs = os.path.join(path_inp, args.output) + ".qs"
-        file_aux = os.path.join(path_inp, args.output) + "_"
-    else: #all output files named input
-        logfile_name = inp + ".zip.log"
-        file_out = inp + ".zip"
-        file_outh = inp + "_header.zip"
-        file_outd = inp + "_dna.zip"
-        file_outq = inp + "_qs.zip"
-        file_header = inp + ".header"
-        file_dna = inp + ".dna"
-        file_qs = inp + ".qs"
-        file_aux = inp + "_"
-    
-
     if(args.bsc): #if the compression is with bsc
-        zip = 0
+        op_comp = 0
     else: #if the compression is with 7zip
-        zip = 1
+        op_comp = 1
+
+    file_inp = sys.argv[1]
+    if(args.reorder):
+        op = args.reorder
+        reorder(sys.argv[1], inp, op)
+        if(op == 1):
+            r = '_lex'
+            file_inp = inp + "_lex.fastq"
+        elif(op == 2):
+            r = '_colex'
+            file_inp = inp + "_colex.fastq"
+        elif(op == 3):
+            r = '_random'
+            file_inp = inp + "_random.fastq"
+    
+    if(args.output): #all output files named args.argv[1]
+        inp_aux = os.path.join(path_inp, args.output)
+        if(args.reorder):
+            inp_aux = inp_aux + r
+
+    else: #all output files named --output
+        inp_aux = inp
+        if(args.reorder):
+            inp_aux = inp + r
+    
+    if(op_comp == 1):
+        logfile_name = inp_aux + ".zip.log"
+        file_out = inp_aux + ".zip"
+        file_outh = inp_aux + "_header.zip"
+        file_outd = inp_aux + "_dna.zip"
+        file_outq = inp_aux + "_qs.zip"
+    else:
+        logfile_name = inp_aux + ".bsc.log"
+        file_out = inp_aux + ".bsc"
+        file_outh = inp_aux + "_header.bsc"
+        file_outd = inp_aux + "_dna.bsc"
+        file_outq = inp_aux + "_qs.bsc"
+
+    file_header = inp_aux + ".header"
+    file_dna = inp_aux + ".dna"
+    file_qs = inp_aux + ".qs"
+    file_aux = inp_aux + "_"
     
     if(args.c1): #if the compression is total
         aux = 1
-    if(args.c2): #if the compression is in blocks
+    if(args.c2): #if the compression is in partitions
         aux = 2
-    if(args.c3): #if the compression is in partitions
+    if(args.c3): #if the compression is in 3-components + partitions
         aux = 3
-    
-    file_data = "dataset/frag_1_"+ str(aux) + "_data.txt" #create the document with the compression and time data
+   
     print("Sending logging messages to file:", logfile_name)
 
     with open(logfile_name,"a") as logfile:
@@ -76,24 +101,15 @@ def main():
         logfile.flush()
         
         if(args.part):
-            part = args.part
-
-        sarq = os.path.getsize(sys.argv[1])
-
-        if(args.sap):
-            order = 0
-            time_r = reorder(sys.argv[1], order, path, path_inp)
-            file_inp = path_inp + '_sap.fastq'
-        
-        elif(args.lex):
-            order = 1
-            time_r = reorder(sys.argv[1], order, path, path_inp)
-            file_inp = path_inp + '_lex.fastq'
-
+            part = args.part*(2**20) # X MB
         else:
-            time_r = 0
+            part = 10*(2**20) # 10 MB
 
-        f_data = open(file_data, 'a') #open file data
+        sarq = os.path.getsize(file_inp)
+        if(args.test):
+            inp_original = os.path.splitext(args.test)[0]
+            file_data = inp_original + "_" + str(aux) + "_data.txt" #create the document with the compression and time data
+            f_data = open(file_data, 'a') #open file data
 
         ###### print data from the compression ######
         print("\n\n###### COMPRESSION ######\n")
@@ -101,97 +117,124 @@ def main():
 
         if(args.c1): #if the compression is total
             
-            time1 = compression(file_out, sys.argv[1], logfile_name, zip) #return of the time compression 
-            sarq_zip1 = os.path.getsize(file_out) 
+            t = compression(file_out, file_inp, logfile_name, op_comp ) #return of the time compression 
+            sarq_c = os.path.getsize(file_out)
+            ratio = (sarq_c/sarq)*100
 
-            print("Size .zip: {:.6f} bytes".format(sarq_zip1))
-            print("Compression 1 (FASTQ): {:.6f}\n".format(sarq_zip1/sarq))
-            print("Time 1: {:.6f}".format(time1))
-            f_data.write("{:.6f} {:.6f}\n".format(sarq_zip1/sarq, time1))
-
-        if(args.c2): #if the compression is in 3 blocks (header, dna and qs)
+            print("Size .zip: {:.6f} bytes".format(sarq_c))
+            print("Compression 1 (FASTQ): {:.6f}".format(sarq_c/sarq))
+            print("Time 1: {:.6f}".format(t))
+            if(args.test):
+                f_data.write("{:.6f} {:.6f} {:.2f}\n".format(sarq_c/sarq, t, ratio))
+        
+        if(args.c2): #if the compression is in partitions (size set in the input command)
             
-            time2 = 0
-            blocks(file_header, file_dna, file_qs)
-
-            #return of the time compression, sum of the times
-            time2 = time2 + compression(file_outh, file_header, logfile_name, zip) 
-            time2 = time2 + compression(file_outd, file_dna, logfile_name, zip)
-            time2 = time2 + compression(file_outq, file_qs, logfile_name, zip)
-            sarq_zip2 = os.path.getsize(file_outh) + os.path.getsize(file_outd) + os.path.getsize(file_outq)
-
-            print("Size _header.zip: {:.6f} bytes".format(os.path.getsize(file_outh)))
-            print("Size _dna.zip: {:.6f} bytes".format(os.path.getsize(file_outd)))
-            print("Size _qs.zip: {:.6f} bytes".format(os.path.getsize(file_outq)))
-            print("Compression 2 (header + dna + qs): {:.6f}\n".format(sarq_zip2/sarq))
-            print("Time 2: {:.6f}".format(time2))
-            f_data.write("{:.6f} {:.6f}\n".format(sarq_zip2/sarq, time2))
-
-        if(args.c3): #if the compression is in partitions (size set in the input command)
-            
-            time3 = 0
-            partition(file_aux, part)
-            parts = sarq/part
+            parts = partition(file_aux, part, file_inp)
             cont = 1
-            sarq_zip3 = 0
+            sarq_c = 0
+            t = 0
             while(cont <= parts):
-
                 file_part = file_aux + str(cont) + ".part"
-                if(zip == 1):
+                if(op_comp == 1):
                     file_outp = file_aux + str(cont) + ".zip"
                 else:
                     file_outp = file_aux + str(cont) + ".bsc"
 
-                time3 = time3 + compression(file_outp, file_part, logfile_name, zip) #return of the time compression, sum of the times
-                sarq_zip3 = sarq_zip3 + os.path.getsize(file_outp)
+                t = t + compression(file_outp, file_part, logfile_name, op_comp) #return of the time compression, sum of the times
+                sarq_c = sarq_c + os.path.getsize(file_outp)
                 cont = cont + 1
+            ratio = (sarq_c/sarq)*100
 
-            print("Size of one part.zip: {:.6f} bytes".format(sarq/parts))
-            print("Compression 3 (sum parts): {:.6f}".format(sarq_zip3/sarq))
-            print("Time 3: {:.6f}".format(time3))
-            f_data.write("{:.6f} {:.6f}\n".format(sarq_zip3/sarq, time3))
+            print("Compression 3 (sum parts): {:.6f}".format(sarq_c/sarq))
+            print("Time: {:.6f}".format(t))
+            if(args.test):
+                f_data.write("{:.6f} {:.6f} {:.2f}\n".format(sarq_c/sarq, t, ratio))
+            
+        if(args.c3): #if the compression is in 3-components (header, dna and qs)
+            
+            t = 0
+            components(file_header, file_dna, file_qs, file_inp)
 
-        f_data.close() #close data file
+            file_h = os.path.splitext(file_outh)[0] + "_"
+            file_d = os.path.splitext(file_outd)[0] + "_"
+            file_q = os.path.splitext(file_outq)[0] + "_"
 
-##########################################################################################################
-###### function of the reorder ######
-##########################################################################################################
-def reorder(file_input, order, path, path_inp): 
-    if(order == 0): #reorder with SAP
-        exe = os.path.join(path, sap)
-        file_order = path_inp + '_sap.fastq'
-    else: #compression in lexicographical order
-        exe = os.path.join(path, lex)
-        file_order = path_inp + '_lex.fastq'
+            parts_h = partition(file_h, part, file_header)
+            parts_d = partition(file_d, part, file_dna)
+            parts_q = partition(file_q, part, file_qs)
 
-    command = "{exe} {input} {order}".format(exe=exe, input=file_input, order=file_order)
-    #execution of the command
-    print(command)
-    time_r = execute_command(command)
-    return time_r #return time of the reorder
+            cont = 1
+            sarq_c = 0
+            t = 0
+            while(cont <= parts_h or cont <= parts_d or cont <= parts_q):
+
+                if(cont <= parts_h):
+                    file_part = file_h + str(cont) + ".part"
+                    if(op_comp == 1):
+                        file_outp = file_h + str(cont) + ".zip"
+                    else:
+                        file_outp = file_h + str(cont) + ".bsc"
+
+                    t = t + compression(file_outp, file_part, logfile_name, op_comp) #return of the time compression, sum of the times
+                    sarq_c = sarq_c + os.path.getsize(file_outp)
+
+                if(cont <= parts_d):
+                    file_part = file_d + str(cont) + ".part"
+                    if(op_comp == 1):
+                        file_outp = file_d + str(cont) + ".zip"
+                    else:
+                        file_outp = file_d + str(cont) + ".bsc"
+                    t = t + compression(file_outp, file_part, logfile_name, op_comp) #return of the time compression, sum of the times
+                    sarq_c = sarq_c + os.path.getsize(file_outp)
+
+                if(cont <= parts_q):
+                    file_part = file_q + str(cont) + ".part"
+                    if(op_comp == 1):
+                        file_outp = file_q + str(cont) + ".zip"
+                    else:
+                        file_outp = file_q + str(cont) + ".bsc"
+
+                    t = t + compression(file_outp, file_part, logfile_name, op_comp) #return of the time compression, sum of the times
+                    sarq_c = sarq_c + os.path.getsize(file_outp)
+                cont = cont + 1
+            ratio = (sarq_c/sarq)*100
+
+            print("Compression 3-components with partitions (sum parts): {:.6f}".format(sarq_c/sarq))
+            print("Time: {:.6f}".format(t))
+            if(args.test):
+                f_data.write("{:.6f} {:.6f} {:.2f}\n".format(sarq_c/sarq, t, ratio))
+
+        if(args.test):
+            f_data.close() #close data file
         
+##########################################################################################################
+###### function of the reordered ######
+##########################################################################################################
+def reorder(file_inp, file_output, op):
+    command = "python3 {reorder} {input} {output} {op}".format(reorder=cmdreorder, input=file_inp, output=file_output, op=op)
+    execute_command(command)
+
 ##########################################################################################################
 ###### function of the compression ######
 ##########################################################################################################
-def compression(file_out, file_input, logfile, zip): 
-    if(zip == 1): #compression with bsc
+def compression(file_out, file_input, logfile, op_comp): 
+    if(op_comp == 1): #compression with 7zip
         cmd = cmd7z
         command =  cmd + " {zip} {input} >> {log}".format(zip=file_out, input=file_input, log=logfile)
     else: #compression with bsc
         cmd = cmdbsc
         command =  cmd + " {input} {zip} >> {log}".format(zip=file_out, input=file_input, log=logfile)
-    
-    
+
     #execution of the command
-    time1 = execute_command(command)
-    return time1 #return time de compression
+    t = execute_command(command)
+    return t #return time de compression
 
 ##########################################################################################################
-###### function of the blocks division ######
+###### function of the 3-components division ######
 ##########################################################################################################
-def blocks(file_header, file_dna, file_qs):
+def components(file_header, file_dna, file_qs, file_inp):
 
-    f = open(sys.argv[1], 'r')
+    f = open(file_inp, 'r')
     f_header = open(file_header, 'w') #file with header
     f_dna = open(file_dna, 'w') #file with dna
     f_qs = open(file_qs, 'w') #file with qs
@@ -215,14 +258,13 @@ def blocks(file_header, file_dna, file_qs):
 ##########################################################################################################
 ###### function of the partition ######
 ##########################################################################################################
-def partition(file_aux, part):
+def partition(file_aux, part, file_inp):
 
     cont = 1 #count the number of parts
 
     file_part = file_aux + str(cont) + ".part"
     f_part = open(file_part, 'w')
-    f = open(sys.argv[1], 'r')
-    
+    f = open(file_inp, 'r')
     sum = 0
     s = None
     while(s != ""):
@@ -231,8 +273,10 @@ def partition(file_aux, part):
             sum += len(s)
             f_part.write(s) #header, dna, +, qs
         
-        if(sum >= part):
-            cont += 1
+        if(s == "" and sum < part):
+            cont = cont + 1
+        elif(sum >= part):
+            cont = cont + 1
             sum = 0
             f_part.close()
             file_part = file_aux + str(cont) + ".part"
@@ -240,6 +284,7 @@ def partition(file_aux, part):
 
     f_part.close()
     f.close()
+    return cont-1
 
 ##########################################################################################################
 
@@ -256,11 +301,11 @@ def execute_command(command):
     try:    
         start = time.time()
         subprocess.call(command, shell = True)
-        time1 = time.time()-start
+        t = time.time()-start
     except subprocess.CalledProcessError:
         print("Error to executing command line: {command}".format(command = command))
         return False
-    return time1 #return time of the execution
+    return t #return time of the execution
 
 ##########################################################################################################
 
